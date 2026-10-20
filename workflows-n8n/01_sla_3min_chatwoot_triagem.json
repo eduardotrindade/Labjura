@@ -1,0 +1,285 @@
+{
+  "name": "LabJura - 01: Chatwoot SLA 3 Minutos & Triagem",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-sla-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-chatwoot",
+      "name": "Webhook Chatwoot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\n// Filtrar apenas mensagens recebidas de pacientes (incoming)\nconst isIncoming = body.message_type === 'incoming' || body.event === 'message_created';\nconst conversationId = body.conversation?.id || body.id;\nconst contactName = body.sender?.name || 'Paciente';\nconst content = body.content || '';\nconst accountId = body.account?.id || 1;\n\nreturn [{\n  json: {\n    isValid: isIncoming,\n    conversationId,\n    contactName,\n    content,\n    accountId,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "filter-messages",
+      "name": "Filtro Mensagem Paciente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-valid",
+      "name": "É Mensagem Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CHATWOOT_URL || 'http://chatwoot-web:3000' }}/api/v1/accounts/{{ $json.accountId }}/conversations/{{ $json.conversationId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $env.CHATWOOT_BOT_TOKEN || 'SEU_CHATWOOT_BOT_TOKEN' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "=🔬 Olá, {{ $json.contactName }}! Bem-vindo ao Laboratório.\n\nRecebemos sua mensagem! Nosso tempo médio de resposta humana é de até 3 minutos.\n\nPara agilizar:\n1️⃣ Digite 'LAUDO' para retirar seus resultados online.\n2️⃣ Digite 'PREPARO' para instruções de jejum e coleta.\n3️⃣ Aguarde que um atendente já vai assumir seu atendimento."
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-auto-reply",
+      "name": "Auto-Resposta Instantânea (< 10s)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2.5,
+        "unit": "minutes"
+      },
+      "id": "wait-sla",
+      "name": "Watchdog SLA (2.5 min)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CHATWOOT_URL || 'http://chatwoot-web:3000' }}/api/v1/accounts/{{ $('filter-messages').first().json.accountId }}/conversations/{{ $('filter-messages').first().json.conversationId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $env.CHATWOOT_BOT_TOKEN || 'SEU_CHATWOOT_BOT_TOKEN' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "verify-status",
+      "name": "Verificar Status da Conversa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1320,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "open"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{ $json.assignee_id }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "sla-alert-check",
+      "name": "SLA em Risco?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CHATWOOT_URL || 'http://chatwoot-web:3000' }}/api/v1/accounts/{{ $('filter-messages').first().json.accountId }}/conversations/{{ $('filter-messages').first().json.conversationId }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $env.CHATWOOT_BOT_TOKEN || 'SEU_CHATWOOT_BOT_TOKEN' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "⚠️ [ALERTA SLA 3 MINUTOS]: Esta conversa está sem atendente há mais de 2.5 minutos! Favor assumir imediatamente."
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-private-sla-warning",
+      "name": "Alerta Privado aos Atendentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1780,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Filtro Mensagem Paciente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Mensagem Paciente": {
+      "main": [
+        [
+          {
+            "node": "É Mensagem Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É Mensagem Válida?": {
+      "main": [
+        [
+          {
+            "node": "Auto-Resposta Instantânea (< 10s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Resposta Instantânea (< 10s)": {
+      "main": [
+        [
+          {
+            "node": "Watchdog SLA (2.5 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watchdog SLA (2.5 min)": {
+      "main": [
+        [
+          {
+            "node": "Verificar Status da Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Status da Conversa": {
+      "main": [
+        [
+          {
+            "node": "SLA em Risco?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SLA em Risco?": {
+      "main": [
+        [
+          {
+            "node": "Alerta Privado aos Atendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

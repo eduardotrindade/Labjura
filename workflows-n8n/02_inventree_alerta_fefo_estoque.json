@@ -1,0 +1,178 @@
+{
+  "name": "LabJura - 02: InvenTree Alerta FEFO & Estoque Mínimo",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-daily-7am",
+      "name": "Disparo Diário (07:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVENTREE_URL || 'http://inventree-server:8000' }}/api/stock/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token {{ $env.INVENTREE_API_TOKEN || 'SEU_INVENTREE_TOKEN' }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "in_stock",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-inventree-stock",
+      "name": "Consultar Estoque InvenTree",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst today = new Date();\nconst warningDays = 15; // Alerta com 15 dias de antecedência para FEFO\n\nconst expiringSoon = [];\nconst expired = [];\n\nfor (const item of items) {\n  const data = item.json;\n  if (data.expiry_date) {\n    const expiry = new Date(data.expiry_date);\n    const diffTime = expiry - today;\n    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));\n\n    if (diffDays <= 0) {\n      expired.push({\n        nome: data.part_detail?.name || `Item #${data.part}`,\n        lote: data.batch || 'Sem Lote',\n        validade: data.expiry_date,\n        quantidade: data.quantity,\n        localizacao: data.location_detail?.name || 'Não definida',\n        status: 'VENCIDO'\n      });\n    } else if (diffDays <= warningDays) {\n      expiringSoon.push({\n        nome: data.part_detail?.name || `Item #${data.part}`,\n        lote: data.batch || 'Sem Lote',\n        validade: data.expiry_date,\n        diasRestantes: diffDays,\n        quantidade: data.quantity,\n        localizacao: data.location_detail?.name || 'Não definida',\n        status: 'PRÓXIMO AO VENCIMENTO (FEFO)'\n      });\n    }\n  }\n}\n\nreturn [{\n  json: {\n    totalExpired: expired.length,\n    totalExpiringSoon: expiringSoon.length,\n    expiredList: expired,\n    expiringList: expiringSoon,\n    hasAlerts: (expired.length > 0 || expiringSoon.length > 0)\n  }\n}];"
+      },
+      "id": "fefo-analyzer",
+      "name": "Análise FEFO de Reagentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasAlerts }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "has-critical-items",
+      "name": "Existem Reagentes Críticos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GLPI_URL || 'http://glpi:80' }}/apirest.php/Ticket",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "App-Token",
+              "value": "={{ $env.GLPI_APP_TOKEN || 'SEU_GLPI_APP_TOKEN' }}"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $env.GLPI_SESSION_TOKEN || 'SEU_GLPI_SESSION_TOKEN' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "input",
+              "value": "={\n  \"name\": \"[ALERTA ESTOQUE] Reagentes Vencidos ou Próximos ao Vencimento (FEFO)\",\n  \"content\": \"Relatório automático gerado pelo InvenTree:\\n\\nReagentes Vencidos: \" + $json.totalExpired + \"\\nReagentes Próximos ao Vencimento (< 15 dias): \" + $json.totalExpiringSoon + \"\\n\\nFavor providenciar descarte/substituição imediata conforme normas da ANVISA/PALC.\",\n  \"urgency\": 4,\n  \"priority\": 4\n}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-glpi-ticket",
+      "name": "Abrir Chamado de Reposição no GLPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1120,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Disparo Diário (07:00)": {
+      "main": [
+        [
+          {
+            "node": "Consultar Estoque InvenTree",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Estoque InvenTree": {
+      "main": [
+        [
+          {
+            "node": "Análise FEFO de Reagentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Análise FEFO de Reagentes": {
+      "main": [
+        [
+          {
+            "node": "Existem Reagentes Críticos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existem Reagentes Críticos?": {
+      "main": [
+        [
+          {
+            "node": "Abrir Chamado de Reposição no GLPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

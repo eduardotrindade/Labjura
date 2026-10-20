@@ -1,0 +1,190 @@
+version: '3.8'
+
+networks:
+  labjura_net:
+    driver: bridge
+
+services:
+  # ============================================================================
+  # 1. CAMADA DE BANCOS DE DADOS & CACHE (COMPARTILHADA)
+  # ============================================================================
+
+  # MariaDB: Banco de dados dedicado ao GLPI
+  glpi-db:
+    image: mariadb:10.11
+    container_name: labjura_glpi_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_DATABASE}
+      MYSQL_USER: ${MARIADB_USER}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - ./db_data/mariadb:/var/lib/mysql
+    networks:
+      - labjura_net
+
+  # PostgreSQL: Banco de dados unificado para InvenTree e Chatwoot
+  postgres:
+    image: postgres:15-alpine
+    container_name: labjura_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
+      INVENTREE_DB_USER: ${INVENTREE_DB_USER}
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD}
+      CHATWOOT_DB_NAME: ${CHATWOOT_DB_NAME}
+      CHATWOOT_DB_USER: ${CHATWOOT_DB_USER}
+      CHATWOOT_DB_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+    volumes:
+      - ./db_data/postgres:/var/lib/postgresql/data
+      - ./scripts/init-multi-postgres.sh:/docker-entrypoint-initdb.d/init-multi-postgres.sh:ro
+    networks:
+      - labjura_net
+
+  # Redis: Cache e filas para InvenTree (DB 0) e Chatwoot (DB 1)
+  redis:
+    image: redis:7-alpine
+    container_name: labjura_redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - ./db_data/redis:/data
+    networks:
+      - labjura_net
+
+  # ============================================================================
+  # 2. PATRIMÔNIO & CHAMADOS (GLPI)
+  # ============================================================================
+  glpi:
+    image: diouda/glpi:latest
+    container_name: labjura_glpi
+    restart: unless-stopped
+    ports:
+      - "${PORT_GLPI}:80"
+    volumes:
+      - ./glpi/files:/var/www/html/glpi/files
+      - ./glpi/config:/var/www/html/glpi/config
+      - ./glpi/plugins:/var/www/html/glpi/plugins
+    environment:
+      TIMEZONE: America/Sao_Paulo
+      GLPI_INSTALL_MODE: 0
+    depends_on:
+      - glpi-db
+    networks:
+      - labjura_net
+
+  # ============================================================================
+  # 3. ESTOQUE LABORATORIAL, LOTES & FEFO (INVENTREE)
+  # ============================================================================
+  inventree-server:
+    image: inventree/inventree:latest
+    container_name: labjura_inventree_server
+    restart: unless-stopped
+    ports:
+      - "${PORT_INVENTREE}:8000"
+    command: invoke server
+    environment:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
+      INVENTREE_DB_HOST: postgres
+      INVENTREE_DB_PORT: 5432
+      INVENTREE_DB_USER: ${INVENTREE_DB_USER}
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD}
+      INVENTREE_CACHE_HOST: redis
+      INVENTREE_CACHE_PORT: 6379
+      INVENTREE_CACHE_PASSWORD: ${REDIS_PASSWORD}
+      INVENTREE_SECRET_KEY: ${INVENTREE_SECRET_KEY}
+      INVENTREE_ADMIN_USER: ${INVENTREE_ADMIN_USER}
+      INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD}
+      INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL}
+      INVENTREE_BACKUP_ENABLE: ${INVENTREE_BACKUP_ENABLE}
+      INVENTREE_SITE_URL: http://${DOMAIN_INVENTREE}:${PORT_INVENTREE}
+    volumes:
+      - ./inventree/data:/home/inventree/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - labjura_net
+
+  inventree-worker:
+    image: inventree/inventree:latest
+    container_name: labjura_inventree_worker
+    restart: unless-stopped
+    command: invoke worker
+    environment:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
+      INVENTREE_DB_HOST: postgres
+      INVENTREE_DB_PORT: 5432
+      INVENTREE_DB_USER: ${INVENTREE_DB_USER}
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD}
+      INVENTREE_CACHE_HOST: redis
+      INVENTREE_CACHE_PORT: 6379
+      INVENTREE_CACHE_PASSWORD: ${REDIS_PASSWORD}
+      INVENTREE_SECRET_KEY: ${INVENTREE_SECRET_KEY}
+    volumes:
+      - ./inventree/data:/home/inventree/data
+    depends_on:
+      - inventree-server
+    networks:
+      - labjura_net
+
+  # ============================================================================
+  # 4. ATENDIMENTO AO PACIENTE & SLA 3 MIN (CHATWOOT)
+  # ============================================================================
+  chatwoot-web:
+    image: chatwoot/chatwoot:latest
+    container_name: labjura_chatwoot_web
+    restart: unless-stopped
+    ports:
+      - "${PORT_CHATWOOT}:3000"
+    entrypoint: docker/entrypoints/rails.sh
+    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    environment:
+      FRONTEND_URL: ${FRONTEND_URL}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${CHATWOOT_DB_NAME}
+      POSTGRES_USERNAME: ${CHATWOOT_DB_USER}
+      POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      ENABLE_ACCOUNT_SIGNUP: ${ENABLE_ACCOUNT_SIGNUP}
+    volumes:
+      - ./chatwoot/storage:/app/storage
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - labjura_net
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:latest
+    container_name: labjura_chatwoot_worker
+    restart: unless-stopped
+    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    environment:
+      FRONTEND_URL: ${FRONTEND_URL}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${CHATWOOT_DB_NAME}
+      POSTGRES_USERNAME: ${CHATWOOT_DB_USER}
+      POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+    volumes:
+      - ./chatwoot/storage:/app/storage
+    depends_on:
+      - chatwoot-web
+    networks:
+      - labjura_net

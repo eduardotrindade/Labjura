@@ -1,0 +1,33 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Databases & Persisted storage volumes
+/data/
+db_data/
+postgres_data/
+mariadb_data/
+redis_data/
+
+# Service-specific data directories
+chatwoot/storage/*
+!chatwoot/storage/.gitkeep
+glpi/files/*
+!glpi/files/.gitkeep
+glpi/config/*
+!glpi/config/.gitkeep
+glpi/plugins/*
+!glpi/plugins/.gitkeep
+inventree/data/*
+!inventree/data/.gitkeep
+
+# Logs and scratch
+*.log
+scratch/
+.tmp/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db

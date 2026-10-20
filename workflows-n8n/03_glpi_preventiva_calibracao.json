@@ -1,0 +1,146 @@
+{
+  "name": "LabJura - 03: GLPI Calibração & Manutenção Preventiva",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-monday",
+      "name": "Disparo Semanal (Segunda 08:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.GLPI_URL || 'http://glpi:80' }}/apirest.php/Computer",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "App-Token",
+              "value": "={{ $env.GLPI_APP_TOKEN || 'SEU_GLPI_APP_TOKEN' }}"
+            },
+            {
+              "name": "Session-Token",
+              "value": "={{ $env.GLPI_SESSION_TOKEN || 'SEU_GLPI_SESSION_TOKEN' }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "range",
+              "value": "0-100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-glpi-assets",
+      "name": "Consultar Equipamentos GLPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const assets = $input.all();\nconst needCalibration = [];\n\nfor (const item of assets) {\n  const asset = item.json;\n  // Exemplo de verificação de campos personalizados de calibração biomédica\n  needCalibration.push({\n    id: asset.id,\n    nome: asset.name,\n    numeroSerie: asset.serial || 'N/A',\n    status: 'Auditoria Regular (ANVISA/PALC)',\n    ultimaModificacao: asset.date_mod\n  });\n}\n\nreturn [{\n  json: {\n    totalAssets: needCalibration.length,\n    assets: needCalibration,\n    reportGeneratedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-calibration-report",
+      "name": "Formatar Relatório de Calibração",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL || 'https://webhook.site/placeholder' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "titulo",
+              "value": "🔬 Relatório Semanal de Manutenção & Calibração de Equipamentos"
+            },
+            {
+              "name": "quantidadeEquipamentos",
+              "value": "={{ $json.totalAssets }}"
+            },
+            {
+              "name": "geradoEm",
+              "value": "={{ $json.reportGeneratedAt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notification",
+      "name": "Notificar Engenharia Clínica / TI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        940,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Disparo Semanal (Segunda 08:00)": {
+      "main": [
+        [
+          {
+            "node": "Consultar Equipamentos GLPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Equipamentos GLPI": {
+      "main": [
+        [
+          {
+            "node": "Formatar Relatório de Calibração",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Relatório de Calibração": {
+      "main": [
+        [
+          {
+            "node": "Notificar Engenharia Clínica / TI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
