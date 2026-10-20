@@ -12,16 +12,7 @@ Este guia documenta o processo de versionamento do projeto **LabJura**, publica�
    git config --global user.email "seu-email@exemplo.com"
    ```
 
-2. Crie um novo repositório privado no GitHub (ex: `https://github.com/SEU_USUARIO/labjura.git`).
-
-3. No terminal do diretório `d:\Sistemas\sistemas\LabJura`, adicione os arquivos e faça o primeiro commit:
-   ```bash
-   git add .
-   git commit -m "feat: stack completa LabJura (GLPI + InvenTree + Chatwoot + workflows n8n)"
-   git branch -M main
-   git remote add origin https://github.com/SEU_USUARIO/labjura.git
-   git push -u origin main
-   ```
+2. Repositório no GitHub: `https://github.com/eduardotrindade/Labjura.git`.
 
 ---
 
@@ -35,8 +26,8 @@ Este guia documenta o processo de versionamento do projeto **LabJura**, publica�
 2. Navegue até o diretório onde organiza seus sistemas (ex: `/opt` ou `/var/www`):
    ```bash
    cd /opt
-   git clone https://github.com/SEU_USUARIO/labjura.git
-   cd labjura
+   git clone https://github.com/eduardotrindade/Labjura.git
+   cd Labjura
    ```
 
 3. Crie o arquivo `.env` de produção a partir do `.env.example`:
