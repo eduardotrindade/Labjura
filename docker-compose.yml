@@ -100,7 +100,7 @@ services:
       INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD}
       INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL}
       INVENTREE_BACKUP_ENABLE: ${INVENTREE_BACKUP_ENABLE}
-      INVENTREE_SITE_URL: http://${DOMAIN_INVENTREE}:${PORT_INVENTREE}
+      INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8081}
     volumes:
       - ./inventree/data:/home/inventree/data
     depends_on:
