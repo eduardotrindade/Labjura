@@ -58,6 +58,16 @@ docker compose up -d
 
 ---
 
+## 🌐 URLs de Produção (VPS com SSL HTTPS)
+
+| Serviço | URL de Produção | Finalidade | Credenciais Iniciais |
+| :--- | :--- | :--- | :--- |
+| **GLPI** | [https://patrimonio.it4b.inf.br](https://patrimonio.it4b.inf.br) | Patrimônio, Equipamentos & Calibração | Usuário: `glpi` \| Senha: `glpi` |
+| **InvenTree** | [https://estoque.it4b.inf.br](https://estoque.it4b.inf.br) | Estoque Laboratorial, Lotes & FEFO | Usuário: `admin` \| Senha: `68ddc58c5ba73f71cbf75b1a` |
+| **Chatwoot** | [https://chat.it4b.inf.br](https://chat.it4b.inf.br) | Atendimento Omnichannel (SLA 3 Min) | Cadastro do Administrador no 1º acesso |
+
+---
+
 ## 📂 Estrutura do Repositório
 
 ```
