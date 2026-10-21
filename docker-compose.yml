@@ -85,7 +85,6 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT_INVENTREE}:8000"
-    command: invoke server
     environment:
       INVENTREE_DB_ENGINE: postgresql
       INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
