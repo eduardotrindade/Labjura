@@ -127,6 +127,7 @@ services:
       INVENTREE_CACHE_PORT: 6379
       INVENTREE_CACHE_PASSWORD: ${REDIS_PASSWORD}
       INVENTREE_SECRET_KEY: ${INVENTREE_SECRET_KEY}
+      INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8081}
     volumes:
       - ./inventree/data:/home/inventree/data
     depends_on:
