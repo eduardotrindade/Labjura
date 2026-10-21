@@ -27,6 +27,11 @@ fi
 
 if [ -n "$CHATWOOT_DB_NAME" ] && [ -n "$CHATWOOT_DB_USER" ]; then
     create_user_and_database "$CHATWOOT_DB_NAME" "$CHATWOOT_DB_USER" "$CHATWOOT_DB_PASSWORD"
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -d "$CHATWOOT_DB_NAME" <<-EOSQL
+        ALTER USER $CHATWOOT_DB_USER WITH SUPERUSER;
+        CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+EOSQL
 fi
 
 echo "PostgreSQL multi-database inicializado com sucesso!"
