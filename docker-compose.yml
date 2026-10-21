@@ -86,6 +86,7 @@ services:
     ports:
       - "${PORT_INVENTREE}:8000"
     environment:
+      INVENTREE_CONTAINER: server
       INVENTREE_DB_ENGINE: postgresql
       INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
       INVENTREE_DB_HOST: postgres
@@ -115,6 +116,7 @@ services:
     restart: unless-stopped
     command: invoke worker
     environment:
+      INVENTREE_CONTAINER: worker
       INVENTREE_DB_ENGINE: postgresql
       INVENTREE_DB_NAME: ${INVENTREE_DB_NAME}
       INVENTREE_DB_HOST: postgres
