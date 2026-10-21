@@ -59,7 +59,7 @@ services:
   # 2. PATRIMÔNIO & CHAMADOS (GLPI)
   # ============================================================================
   glpi:
-    image: diouda/glpi:latest
+    image: glpi/glpi:latest
     container_name: labjura_glpi
     restart: unless-stopped
     ports:
